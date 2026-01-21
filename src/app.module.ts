@@ -11,6 +11,7 @@ import { EmbeddingsModule } from './modules/embeddings/embeddings.module';
 import { OcrModule } from './modules/ocr/ocr.module';
 import { SearchModule } from './modules/search/search.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { CasesModule } from './modules/cases/cases.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { AuthModule } from './modules/auth/auth.module';
 
     // Feature modules
     AuthModule,
+    CasesModule,
     SyncModule,
     EmbeddingsModule,
     OcrModule,
