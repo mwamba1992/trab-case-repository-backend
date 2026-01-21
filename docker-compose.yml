@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with pgvector extension
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: trab_postgres
+    environment:
+      - POSTGRES_USER=${DB_USERNAME:-trab_user}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-trab_password}
+      - POSTGRES_DB=${DB_NAME:-trab_search}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-trab_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - trab_network
+
+  # Redis for caching and queues
+  redis:
+    image: redis:7-alpine
+    container_name: trab_redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - trab_network
+
+  # NestJS API Application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: trab_api
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - PORT=3000
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=${DB_USERNAME:-trab_user}
+      - DB_PASSWORD=${DB_PASSWORD:-trab_password}
+      - DB_NAME=${DB_NAME:-trab_search}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - TRAIS_BASE_URL=${TRAIS_BASE_URL}
+      - TRAIS_USERNAME=${TRAIS_USERNAME}
+      - TRAIS_PASSWORD=${TRAIS_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/uploads
+    restart: unless-stopped
+    networks:
+      - trab_network
+
+  # OCR Worker (optional - for heavy background processing)
+  # Uncomment when you have OCR module ready
+  # ocr-worker:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: trab_ocr_worker
+  #   environment:
+  #     - NODE_ENV=${NODE_ENV:-production}
+  #     - DB_HOST=postgres
+  #     - REDIS_HOST=redis
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #   volumes:
+  #     - uploads:/app/uploads
+  #   command: node dist/worker.js
+  #   restart: unless-stopped
+  #   networks:
+  #     - trab_network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  uploads:
+    driver: local
+
+networks:
+  trab_network:
+    driver: bridge
