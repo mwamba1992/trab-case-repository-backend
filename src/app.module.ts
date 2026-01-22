@@ -12,6 +12,7 @@ import { OcrModule } from './modules/ocr/ocr.module';
 import { SearchModule } from './modules/search/search.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CasesModule } from './modules/cases/cases.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { CasesModule } from './modules/cases/cases.module';
     EmbeddingsModule,
     OcrModule,
     SearchModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
