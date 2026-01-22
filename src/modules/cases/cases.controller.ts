@@ -1,5 +1,8 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import { Controller, Get, Param, Query, Res, NotFoundException, StreamableFile, UseGuards, BadRequestException } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
+import type { Response } from 'express';
+import { createReadStream, existsSync } from 'fs';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CasesService } from './cases.service';
 
 @ApiTags('Cases')
@@ -48,18 +51,14 @@ export class CasesController {
     );
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get case by ID' })
+  @Get('chairpersons')
+  @ApiOperation({ summary: 'Get list of unique chairpersons' })
   @ApiResponse({
     status: 200,
-    description: 'Returns case details',
+    description: 'Returns unique list of chairpersons',
   })
-  @ApiResponse({
-    status: 404,
-    description: 'Case not found',
-  })
-  async findOne(@Param('id') id: string) {
-    return this.casesService.findOne(id);
+  async getChairpersons() {
+    return this.casesService.getChairpersons();
   }
 
   @Get('number/:caseNumber')
@@ -74,5 +73,109 @@ export class CasesController {
   })
   async findByCaseNumber(@Param('caseNumber') caseNumber: string) {
     return this.casesService.findByCaseNumber(caseNumber);
+  }
+
+  @Get('documents/:documentId/stream')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Stream case document PDF file (requires authentication)' })
+  @ApiQuery({ name: 'download', required: false, type: Boolean, description: 'Set to true to download instead of inline preview' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns the PDF file stream for inline preview',
+    content: {
+      'application/pdf': {},
+    },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Authentication required',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Document not found',
+  })
+  async streamDocument(
+    @Param('documentId') documentId: string,
+    @Query('download') download: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(documentId)) {
+      throw new BadRequestException('Invalid document ID format');
+    }
+
+    const document = await this.casesService.getDocument(documentId);
+
+    if (!document) {
+      throw new NotFoundException('Document not found');
+    }
+
+    if (!existsSync(document.filePath)) {
+      throw new NotFoundException('File not found on server');
+    }
+
+    const file = createReadStream(document.filePath);
+    const isDownload = download === 'true' || download === '1';
+
+    // Security headers
+    res.set({
+      'Content-Type': document.mimeType || 'application/pdf',
+      'Content-Disposition': isDownload
+        ? `attachment; filename="${document.fileName}"`
+        : `inline; filename="${document.fileName}"`,
+      'Content-Security-Policy': "default-src 'none'; script-src 'none'; object-src 'self'",
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'SAMEORIGIN',
+      'Cache-Control': 'private, max-age=3600', // Cache for 1 hour, private
+      'Content-Length': document.fileSize?.toString() || undefined,
+    });
+
+    return new StreamableFile(file);
+  }
+
+  @Get(':id/documents')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all documents for a case' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns list of documents for the case',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - Authentication required',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Case not found',
+  })
+  async getCaseDocuments(@Param('id') id: string) {
+    const caseData = await this.casesService.findOne(id);
+
+    if (!caseData) {
+      throw new NotFoundException('Case not found');
+    }
+
+    return {
+      caseId: caseData.id,
+      caseNumber: caseData.caseNumber,
+      documents: caseData.documents || [],
+    };
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get case by ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns case details',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Case not found',
+  })
+  async findOne(@Param('id') id: string) {
+    return this.casesService.findOne(id);
   }
 }

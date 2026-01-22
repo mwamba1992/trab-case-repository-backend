@@ -2,12 +2,15 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Case } from './entities/case.entity';
+import { CaseDocument } from './entities/case-document.entity';
 
 @Injectable()
 export class CasesService {
   constructor(
     @InjectRepository(Case)
     private readonly caseRepository: Repository<Case>,
+    @InjectRepository(CaseDocument)
+    private readonly documentRepository: Repository<CaseDocument>,
   ) {}
 
   async findAll(limit = 50, offset = 0) {
@@ -28,12 +31,14 @@ export class CasesService {
   async findOne(id: string) {
     return this.caseRepository.findOne({
       where: { id },
+      relations: ['documents', 'parties', 'contents'],
     });
   }
 
   async findByCaseNumber(caseNumber: string) {
     return this.caseRepository.findOne({
       where: { caseNumber },
+      relations: ['documents', 'parties', 'contents'],
     });
   }
 
@@ -82,5 +87,24 @@ export class CasesService {
       order: { decisionDate: 'DESC', createdAt: 'DESC' },
       take: limit,
     });
+  }
+
+  async getDocument(documentId: string) {
+    return this.documentRepository.findOne({
+      where: { id: documentId },
+    });
+  }
+
+  async getChairpersons() {
+    const chairpersons = await this.caseRepository
+      .createQueryBuilder('case')
+      .select('DISTINCT case.chairperson', 'chairperson')
+      .where('case.chairperson IS NOT NULL')
+      .orderBy('case.chairperson', 'ASC')
+      .getRawMany();
+
+    return chairpersons
+      .map(item => item.chairperson)
+      .filter(chairperson => chairperson && chairperson.trim());
   }
 }

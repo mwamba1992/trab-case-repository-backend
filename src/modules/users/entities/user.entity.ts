@@ -10,8 +10,10 @@ import { Exclude } from 'class-transformer';
 
 export enum UserRole {
   ADMIN = 'admin',
-  LAWYER = 'lawyer',
-  PUBLIC = 'public',
+  REGISTRY = 'registry',
+  DECIDERS = 'deciders',
+  CUSTODIAN = 'custodian',
+  CONSOLE = 'console',
 }
 
 export enum UserStatus {
@@ -43,7 +45,7 @@ export class User {
   @Column({
     type: 'enum',
     enum: UserRole,
-    default: UserRole.PUBLIC,
+    default: UserRole.REGISTRY,
   })
   role: UserRole;
 

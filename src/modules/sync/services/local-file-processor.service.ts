@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { Case } from '../../cases/entities/case.entity';
 import { CaseDocument, OcrStatus } from '../../cases/entities/case-document.entity';
 import { TraisClientService } from './trais-client.service';
@@ -20,7 +22,8 @@ export interface ProcessResult {
 @Injectable()
 export class LocalFileProcessorService {
   private readonly logger = new Logger(LocalFileProcessorService.name);
-  private readonly sourceDir = '/Users/mwendavano/trab/files';
+  private readonly sourceDir: string;
+  private isProcessing = false;
 
   constructor(
     @InjectRepository(Case)
@@ -29,7 +32,15 @@ export class LocalFileProcessorService {
     private documentRepository: Repository<CaseDocument>,
     private traisClient: TraisClientService,
     private traisMapper: TraisMapperService,
-  ) {}
+    private configService: ConfigService,
+  ) {
+    // Get source directory from environment variable or use default
+    this.sourceDir = this.configService.get<string>(
+      'LOCAL_FILES_SOURCE_DIR',
+      '/Users/mwendavano/trab/files',
+    );
+    this.logger.log(`Local files source directory: ${this.sourceDir}`);
+  }
 
   /**
    * Process all unprocessed PDF files from local directory
@@ -137,7 +148,7 @@ export class LocalFileProcessorService {
     }
 
     // Copy PDF to uploads directory
-    const pdfInfo = await this.copyPdfToUploads(filename, appeal.appealNo);
+    const pdfInfo = await this.copyPdfToUploads(filename, caseEntity.id);
 
     // Update case with PDF info
     await this.caseRepository.update(caseEntity.id, {
@@ -168,7 +179,7 @@ export class LocalFileProcessorService {
    */
   private async copyPdfToUploads(
     filename: string,
-    appealNo: string,
+    caseId: string,
   ): Promise<{ path: string; url: string; hash: string; size: number }> {
     const sourcePath = path.join(this.sourceDir, filename);
     const uploadsDir = path.join(process.cwd(), 'uploads', 'decisions');
@@ -179,9 +190,10 @@ export class LocalFileProcessorService {
     // Read file
     const buffer = await fs.readFile(sourcePath);
 
-    // Generate filename from appeal number
-    const sanitizedFileName = appealNo.replace(/[^a-zA-Z0-9-]/g, '_');
-    const destPath = path.join(uploadsDir, `${sanitizedFileName}.pdf`);
+    // Use case UUID as filename to ensure uniqueness
+    // Appeal numbers can be duplicated across different tax types
+    // Format: {caseId}.pdf (UUID ensures uniqueness)
+    const destPath = path.join(uploadsDir, `${caseId}.pdf`);
 
     // Copy file
     await fs.writeFile(destPath, buffer);
@@ -191,7 +203,7 @@ export class LocalFileProcessorService {
 
     return {
       path: destPath,
-      url: `/uploads/decisions/${sanitizedFileName}.pdf`,
+      url: `/uploads/decisions/${caseId}.pdf`,
       hash,
       size: buffer.length,
     };
@@ -290,6 +302,40 @@ export class LocalFileProcessorService {
         unprocessedFiles: 0,
         files: [],
       };
+    }
+  }
+
+  /**
+   * Scheduled task: Scan and process local files every 10 minutes
+   */
+  @Cron(CronExpression.EVERY_10_MINUTES)
+  async handleScheduledFileScan() {
+    if (this.isProcessing) {
+      this.logger.debug('File processing already in progress, skipping scheduled scan');
+      return;
+    }
+
+    this.logger.log('Running scheduled file scan...');
+
+    try {
+      this.isProcessing = true;
+      const unprocessed = await this.getUnprocessedFiles();
+
+      if (unprocessed.length === 0) {
+        this.logger.debug('No unprocessed files found');
+        return;
+      }
+
+      this.logger.log(`Found ${unprocessed.length} unprocessed files, starting processing...`);
+      const result = await this.processLocalFiles();
+
+      this.logger.log(
+        `Scheduled file scan completed: ${result.processed} processed, ${result.skipped} skipped, ${result.failed} failed`,
+      );
+    } catch (error) {
+      this.logger.error('Scheduled file scan failed', error.stack);
+    } finally {
+      this.isProcessing = false;
     }
   }
 }

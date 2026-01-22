@@ -6,6 +6,8 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  UseInterceptors,
+  ClassSerializerInterceptor,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -126,5 +128,22 @@ export class AuthController {
   })
   async logout(): Promise<{ message: string }> {
     return { message: 'Successfully logged out. Please discard your tokens.' };
+  }
+
+  @Get('users')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(ClassSerializerInterceptor)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all users (admin only)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns list of all users',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  async getAllUsers(): Promise<User[]> {
+    return this.authService.getAllUsers();
   }
 }

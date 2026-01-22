@@ -209,6 +209,19 @@ export class SyncService {
     // Map TRAIS data to our Case entity
     const caseData = this.traisMapper.mapAppealToCase(appeal);
 
+    // Populate chairperson from judges array if mapper didn't set it
+    // This must be done AFTER mapping but BEFORE saving
+    if (caseData.judges && caseData.judges.length > 0) {
+      if (!caseData.chairperson || caseData.chairperson.trim() === '') {
+        caseData.chairperson = caseData.judges[0];
+        this.logger.debug(`Populated chairperson from judges: ${caseData.chairperson}`);
+      }
+      if (caseData.judges.length > 1 && (!caseData.boardMembers || caseData.boardMembers.length === 0)) {
+        caseData.boardMembers = caseData.judges.slice(1);
+        this.logger.debug(`Populated board members from judges: ${caseData.boardMembers.length}`);
+      }
+    }
+
     // Check if case already exists
     let existingCase = await this.caseRepository.findOne({
       where: [{ traisId: appeal.appealId.toString() }, { caseNumber: appeal.appealNo }],
@@ -269,8 +282,10 @@ export class SyncService {
       const uploadsDir = path.join(process.cwd(), 'uploads', 'decisions');
       await fs.mkdir(uploadsDir, { recursive: true });
 
-      const sanitizedFileName = appeal.appealNo.replace(/[^a-zA-Z0-9-]/g, '_');
-      const pdfPath = path.join(uploadsDir, `${sanitizedFileName}.pdf`);
+      // Use case UUID as filename to ensure uniqueness
+      // Appeal numbers can be duplicated across different tax types
+      // Format: {caseId}.pdf (UUID ensures uniqueness)
+      const pdfPath = path.join(uploadsDir, `${caseId}.pdf`);
 
       await fs.writeFile(pdfPath, pdfBuffer);
 
@@ -279,7 +294,7 @@ export class SyncService {
 
       // Update case with PDF info
       await this.caseRepository.update(caseId, {
-        pdfUrl: `/uploads/decisions/${sanitizedFileName}.pdf`,
+        pdfUrl: `/uploads/decisions/${caseId}.pdf`,
         pdfHash: hash,
       });
 

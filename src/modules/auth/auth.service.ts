@@ -275,4 +275,12 @@ export class AuthService {
 
     return user;
   }
+
+  async getAllUsers(): Promise<User[]> {
+    return this.userRepository.find({
+      order: {
+        createdAt: 'DESC',
+      },
+    });
+  }
 }

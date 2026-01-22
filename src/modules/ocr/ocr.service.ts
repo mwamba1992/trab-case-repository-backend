@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import * as fs from 'fs/promises';
 import { PDFParse } from 'pdf-parse';
 import { createWorker } from 'tesseract.js';
@@ -28,6 +29,8 @@ export interface PageContent {
 @Injectable()
 export class OcrService {
   private readonly logger = new Logger(OcrService.name);
+  private isProcessing = false;
+  private readonly batchSize = 5; // Process 5 documents at a time
 
   constructor(
     @InjectRepository(CaseDocument)
@@ -381,5 +384,141 @@ export class OcrService {
 
     // Process again
     return this.processDocument(documentId);
+  }
+
+  /**
+   * Process pending documents in batch
+   */
+  async processPendingDocuments(): Promise<{
+    processed: number;
+    successful: number;
+    failed: number;
+    results: OcrResult[];
+  }> {
+    const result = {
+      processed: 0,
+      successful: 0,
+      failed: 0,
+      results: [] as OcrResult[],
+    };
+
+    try {
+      // Get pending documents
+      const pendingDocuments = await this.documentRepository.find({
+        where: { ocrStatus: OcrStatus.PENDING },
+        take: this.batchSize,
+        order: { createdAt: 'ASC' },
+      });
+
+      if (pendingDocuments.length === 0) {
+        this.logger.debug('No pending documents to process');
+        return result;
+      }
+
+      this.logger.log(`Processing ${pendingDocuments.length} pending documents...`);
+
+      // Process each document
+      for (const document of pendingDocuments) {
+        try {
+          const ocrResult = await this.processDocument(document.id);
+          result.results.push(ocrResult);
+          result.processed++;
+
+          if (ocrResult.status === OcrStatus.COMPLETED) {
+            result.successful++;
+          } else {
+            result.failed++;
+          }
+
+          this.logger.log(
+            `Processed document ${document.fileName}: ${ocrResult.status}`,
+          );
+        } catch (error) {
+          result.failed++;
+          this.logger.error(
+            `Failed to process document ${document.fileName}`,
+            error.stack,
+          );
+        }
+      }
+
+      this.logger.log(
+        `Batch processing completed: ${result.successful} successful, ${result.failed} failed`,
+      );
+    } catch (error) {
+      this.logger.error('Failed to process pending documents', error.stack);
+    }
+
+    return result;
+  }
+
+  /**
+   * Scheduled task: Process pending OCR documents every 15 minutes
+   */
+  @Cron(CronExpression.EVERY_10_MINUTES)
+  async handleScheduledOcrProcessing() {
+    if (this.isProcessing) {
+      this.logger.debug('OCR processing already in progress, skipping scheduled run');
+      return;
+    }
+
+    this.logger.log('Running scheduled OCR processing...');
+
+    try {
+      this.isProcessing = true;
+
+      // Check for pending documents
+      const pendingCount = await this.documentRepository.count({
+        where: { ocrStatus: OcrStatus.PENDING },
+      });
+
+      if (pendingCount === 0) {
+        this.logger.debug('No pending documents for OCR processing');
+        return;
+      }
+
+      this.logger.log(`Found ${pendingCount} pending documents for OCR processing`);
+
+      // Process pending documents
+      const result = await this.processPendingDocuments();
+
+      this.logger.log(
+        `Scheduled OCR processing completed: ${result.successful} successful, ${result.failed} failed`,
+      );
+    } catch (error) {
+      this.logger.error('Scheduled OCR processing failed', error.stack);
+    } finally {
+      this.isProcessing = false;
+    }
+  }
+
+  /**
+   * Get OCR processing statistics
+   */
+  async getProcessingStats(): Promise<{
+    pending: number;
+    processing: number;
+    completed: number;
+    failed: number;
+    manualReview: number;
+    total: number;
+  }> {
+    const [pending, processing, completed, failed, manualReview, total] = await Promise.all([
+      this.documentRepository.count({ where: { ocrStatus: OcrStatus.PENDING } }),
+      this.documentRepository.count({ where: { ocrStatus: OcrStatus.PROCESSING } }),
+      this.documentRepository.count({ where: { ocrStatus: OcrStatus.COMPLETED } }),
+      this.documentRepository.count({ where: { ocrStatus: OcrStatus.FAILED } }),
+      this.documentRepository.count({ where: { ocrStatus: OcrStatus.MANUAL_REVIEW } }),
+      this.documentRepository.count(),
+    ]);
+
+    return {
+      pending,
+      processing,
+      completed,
+      failed,
+      manualReview,
+      total,
+    };
   }
 }

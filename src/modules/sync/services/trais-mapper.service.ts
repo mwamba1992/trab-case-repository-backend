@@ -38,6 +38,8 @@ export class TraisMapperService {
 
       // Decision details
       judges: this.parseJudges(appeal.decidedBy, appeal._embedded?.summons),
+      chairperson: this.extractChairperson(appeal.decidedBy, appeal._embedded?.summons) || null,
+      boardMembers: this.extractBoardMembers(appeal.decidedBy, appeal._embedded?.summons) || null,
       summary: this.cleanSummary(appeal.summaryOfDecree),
 
       // Tax amounts
@@ -182,6 +184,61 @@ export class TraisMapperService {
     }
 
     return Array.from(judges).filter(j => j && j.trim().length > 0);
+  }
+
+  /**
+   * Extract chairperson (primary judge/first judge in list)
+   */
+  private extractChairperson(decidedBy: string, summons?: any): string | null {
+    // Try summons judge first (usually the chairperson)
+    if (summons?.judge && summons.judge.trim()) {
+      return summons.judge.trim();
+    }
+
+    // Fall back to first judge in decidedBy field
+    if (decidedBy) {
+      const firstJudge = decidedBy
+        .split(/,|\sand\s|&/)[0]
+        ?.trim();
+
+      if (firstJudge && firstJudge.length > 0) {
+        return firstJudge;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Extract board members (excluding chairperson)
+   */
+  private extractBoardMembers(decidedBy: string, summons?: any): string[] | null {
+    const members = new Set<string>();
+
+    // Get chairperson to exclude
+    const chairperson = this.extractChairperson(decidedBy, summons);
+
+    // Add members from summons
+    if (summons) {
+      if (summons.memberOne && summons.memberOne.trim() && summons.memberOne !== chairperson) {
+        members.add(summons.memberOne.trim());
+      }
+      if (summons.memberTwo && summons.memberTwo.trim() && summons.memberTwo !== chairperson) {
+        members.add(summons.memberTwo.trim());
+      }
+    }
+
+    // Add other judges from decidedBy (excluding chairperson)
+    if (decidedBy) {
+      decidedBy
+        .split(/,|\sand\s|&/)
+        .map(j => j.trim())
+        .filter(j => j.length > 0 && j !== chairperson)
+        .forEach(j => members.add(j));
+    }
+
+    const memberArray = Array.from(members).filter(m => m && m.trim().length > 0);
+    return memberArray.length > 0 ? memberArray : null;
   }
 
   /**
