@@ -62,7 +62,7 @@ export class SyncController {
     isSyncing: boolean;
     totalCases: number;
     lastSyncDate: Date | null;
-    casesByStatus: any;
+    casesByOutcome: any;
   }> {
     return this.syncService.getSyncStatus();
   }

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -27,7 +27,7 @@ export interface PageContent {
 }
 
 @Injectable()
-export class OcrService {
+export class OcrService implements OnModuleInit {
   private readonly logger = new Logger(OcrService.name);
   private isProcessing = false;
   private readonly batchSize = 5; // Process 5 documents at a time
@@ -39,6 +39,40 @@ export class OcrService {
     private contentRepository: Repository<CaseContent>,
     private embeddingsService: EmbeddingsService,
   ) {}
+
+  /**
+   * Run on application startup - check for pending OCR documents
+   */
+  async onModuleInit() {
+    this.logger.log('🚀 Application started - checking for pending OCR documents...');
+
+    // Add a small delay to ensure database connections and embeddings are ready
+    setTimeout(async () => {
+      try {
+        const pendingCount = await this.documentRepository.count({
+          where: { ocrStatus: OcrStatus.PENDING },
+        });
+
+        if (pendingCount === 0) {
+          this.logger.log('✓ No pending OCR documents found on startup');
+          return;
+        }
+
+        this.logger.log(`📄 Found ${pendingCount} pending OCR documents on startup, processing batch...`);
+
+        this.isProcessing = true;
+        const result = await this.processPendingDocuments();
+
+        this.logger.log(
+          `✓ Startup OCR processing completed: ${result.successful} successful, ${result.failed} failed`,
+        );
+      } catch (error) {
+        this.logger.error('Startup OCR processing failed', error.stack);
+      } finally {
+        this.isProcessing = false;
+      }
+    }, 5000); // Wait 5 seconds for embeddings service to be ready
+  }
 
   /**
    * Process a document - extract text page by page and generate embeddings

@@ -44,19 +44,12 @@ export class CasesService {
 
   async getStats() {
     const total = await this.caseRepository.count();
-    
+
     const byType = await this.caseRepository
       .createQueryBuilder('case')
       .select('case.case_type', 'type')
       .addSelect('COUNT(*)', 'count')
       .groupBy('case.case_type')
-      .getRawMany();
-
-    const byStatus = await this.caseRepository
-      .createQueryBuilder('case')
-      .select('case.status', 'status')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('case.status')
       .getRawMany();
 
     const byOutcome = await this.caseRepository
@@ -76,7 +69,6 @@ export class CasesService {
     return {
       total,
       byType: byType.map(item => ({ type: item.type, count: parseInt(item.count) })),
-      byStatus: byStatus.map(item => ({ status: item.status, count: parseInt(item.count) })),
       byOutcome: byOutcome.map(item => ({ outcome: item.outcome, count: parseInt(item.count) })),
       totalTaxDisputed: totalTaxDisputed?.total ? parseFloat(totalTaxDisputed.total) : 0,
     };

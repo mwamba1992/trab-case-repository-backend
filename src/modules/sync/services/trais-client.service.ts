@@ -85,9 +85,10 @@ export class TraisClientService {
       this.logger.debug(`Fetching appeals: page=${page}, size=${size}`);
 
       const response = await firstValueFrom(
-        this.httpService.get(`${this.baseUrl}/api/appeals`, {
+        this.httpService.get(`${this.baseUrl}/appeals`, {
           headers: this.getHeaders(),
           params,
+          httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false }),
         }),
       );
 
@@ -113,9 +114,10 @@ export class TraisClientService {
       this.logger.debug(`Fetching appeals updated since ${since.toISOString()}`);
 
       const response = await firstValueFrom(
-        this.httpService.get(`${this.baseUrl}/api/appeals`, {
+        this.httpService.get(`${this.baseUrl}/appeals`, {
           headers: this.getHeaders(),
           params,
+          httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false }),
         }),
       );
 

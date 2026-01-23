@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -20,7 +20,7 @@ export interface ProcessResult {
 }
 
 @Injectable()
-export class LocalFileProcessorService {
+export class LocalFileProcessorService implements OnModuleInit {
   private readonly logger = new Logger(LocalFileProcessorService.name);
   private readonly sourceDir: string;
   private isProcessing = false;
@@ -40,6 +40,38 @@ export class LocalFileProcessorService {
       '/Users/mwendavano/trab/files',
     );
     this.logger.log(`Local files source directory: ${this.sourceDir}`);
+  }
+
+  /**
+   * Run on application startup - check for unprocessed files
+   */
+  async onModuleInit() {
+    this.logger.log('🚀 Application started - checking for unprocessed files...');
+
+    // Add a small delay to ensure database connections are ready
+    setTimeout(async () => {
+      try {
+        const unprocessed = await this.getUnprocessedFiles();
+
+        if (unprocessed.length === 0) {
+          this.logger.log('✓ No unprocessed files found on startup');
+          return;
+        }
+
+        this.logger.log(`📁 Found ${unprocessed.length} unprocessed files on startup, processing...`);
+
+        this.isProcessing = true;
+        const result = await this.processLocalFiles();
+
+        this.logger.log(
+          `✓ Startup file processing completed: ${result.processed} processed, ${result.skipped} skipped, ${result.failed} failed`,
+        );
+      } catch (error) {
+        this.logger.error('Startup file processing failed', error.stack);
+      } finally {
+        this.isProcessing = false;
+      }
+    }, 3000); // Wait 3 seconds for app to fully initialize
   }
 
   /**

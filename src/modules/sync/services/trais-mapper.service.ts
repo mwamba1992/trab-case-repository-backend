@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Case, CaseType, CaseStatus, CaseOutcome } from '../../cases/entities/case.entity';
+import { Case, CaseType } from '../../cases/entities/case.entity';
 import { TraisAppealDto } from '../dto/trais-appeal.dto';
 
 @Injectable()
@@ -28,8 +28,7 @@ export class TraisMapperService {
 
       // Classification
       caseType: this.mapTaxType(appeal._embedded?.tax?.taxName || appeal.natureOfAppeal),
-      status: this.mapStatus(appeal.procedingStatus, appeal.status),
-      outcome: this.mapOutcome(appeal.wonBy, appeal.procedingStatus),
+      outcome: this.getOutcome(appeal),
 
       // Parties
       appellant: appeal.appellantName,
@@ -96,69 +95,26 @@ export class TraisMapperService {
   }
 
   /**
-   * Map proceeding status to CaseStatus
+   * Get outcome from statusTrend or procedingStatus
+   * Returns raw text like "APPEAL DISMISSED", "ALLOWED", etc.
    */
-  private mapStatus(procedingStatus: string, traisStatus?: string | null): CaseStatus {
-    // Check TRAIS status field first if available
-    if (traisStatus && traisStatus.toUpperCase() === 'UNPROCESSED') {
-      return CaseStatus.PENDING;
+  private getOutcome(appeal: TraisAppealDto): string | null {
+    // First try to get from statusTrend (most accurate)
+    if (appeal._embedded?.statusTrend?.appealStatusTrendName) {
+      return appeal._embedded.statusTrend.appealStatusTrendName.trim();
     }
 
-    if (!procedingStatus) return CaseStatus.PENDING;
-
-    const normalized = procedingStatus.toUpperCase();
-
-    if (normalized.includes('ALLOWED') || normalized.includes('DISMISSED')) {
-      return CaseStatus.DECIDED;
-    }
-    if (normalized.includes('WITHDRAWN')) {
-      return CaseStatus.WITHDRAWN;
-    }
-    if (normalized.includes('SETTLED')) {
-      return CaseStatus.SETTLED;
+    // Fall back to procedingStatus
+    if (appeal.procedingStatus) {
+      return appeal.procedingStatus.trim();
     }
 
-    return CaseStatus.PENDING;
-  }
-
-  /**
-   * Map wonBy and procedingStatus to CaseOutcome
-   */
-  private mapOutcome(wonBy: string, procedingStatus: string): CaseOutcome | null {
-    if (!wonBy && !procedingStatus) return null;
-
-    const normalizedWonBy = wonBy?.toUpperCase() || '';
-    const normalizedStatus = procedingStatus?.toUpperCase() || '';
-
-    // Check wonBy field
-    if (normalizedWonBy.includes('APPELLANT') || normalizedWonBy.includes('APPEALANT')) {
-      if (normalizedStatus.includes('PARTIALLY')) {
-        return CaseOutcome.PARTIALLY_ALLOWED;
-      }
-      return CaseOutcome.ALLOWED;
+    // Fall back to outcomeOfDecision
+    if (appeal.outcomeOfDecision && appeal.outcomeOfDecision !== 'NO DECISION') {
+      return appeal.outcomeOfDecision.trim();
     }
 
-    if (normalizedWonBy.includes('RESPONDENT') || normalizedWonBy.includes('TRA')) {
-      return CaseOutcome.DISMISSED;
-    }
-
-    // Check proceeding status
-    if (normalizedStatus.includes('ALLOWED')) {
-      if (normalizedStatus.includes('PARTIALLY')) {
-        return CaseOutcome.PARTIALLY_ALLOWED;
-      }
-      return CaseOutcome.ALLOWED;
-    }
-
-    if (normalizedStatus.includes('DISMISSED')) {
-      return CaseOutcome.DISMISSED;
-    }
-
-    if (normalizedStatus.includes('REMANDED')) {
-      return CaseOutcome.REMANDED;
-    }
-
-    return CaseOutcome.OTHER;
+    return null;
   }
 
   /**

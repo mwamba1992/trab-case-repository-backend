@@ -20,22 +20,6 @@ export enum CaseType {
   OTHER = 'other',
 }
 
-export enum CaseStatus {
-  PENDING = 'pending',
-  DECIDED = 'decided',
-  APPEALED = 'appealed',
-  WITHDRAWN = 'withdrawn',
-  SETTLED = 'settled',
-}
-
-export enum CaseOutcome {
-  ALLOWED = 'allowed',
-  DISMISSED = 'dismissed',
-  PARTIALLY_ALLOWED = 'partially_allowed',
-  REMANDED = 'remanded',
-  OTHER = 'other',
-}
-
 @Entity('cases')
 @Index(['caseNumber'])
 @Index(['decisionDate'])
@@ -70,19 +54,8 @@ export class Case {
   })
   caseType: CaseType;
 
-  @Column({
-    type: 'enum',
-    enum: CaseStatus,
-    default: CaseStatus.PENDING,
-  })
-  status: CaseStatus;
-
-  @Column({
-    type: 'enum',
-    enum: CaseOutcome,
-    nullable: true,
-  })
-  outcome: CaseOutcome | null;
+  @Column({ type: 'varchar', nullable: true })
+  outcome: string | null;
 
   @Column({ type: 'varchar', nullable: true })
   appellant: string;

@@ -324,9 +324,9 @@ export class SyncService {
     isSyncing: boolean;
     totalCases: number;
     lastSyncDate: Date | null;
-    casesByStatus: any;
+    casesByOutcome: any;
   }> {
-    const [totalCases, lastSyncedCase, casesByStatus] = await Promise.all([
+    const [totalCases, lastSyncedCase, casesByOutcome] = await Promise.all([
       this.caseRepository.count(),
       this.caseRepository
         .createQueryBuilder('case')
@@ -335,9 +335,10 @@ export class SyncService {
         .getOne(),
       this.caseRepository
         .createQueryBuilder('case')
-        .select('case.status', 'status')
+        .select('case.outcome', 'outcome')
         .addSelect('COUNT(*)', 'count')
-        .groupBy('case.status')
+        .where('case.outcome IS NOT NULL')
+        .groupBy('case.outcome')
         .getRawMany(),
     ]);
 
@@ -345,8 +346,8 @@ export class SyncService {
       isSyncing: this.isSyncing,
       totalCases,
       lastSyncDate: lastSyncedCase?.syncedAt || null,
-      casesByStatus: casesByStatus.reduce((acc, row) => {
-        acc[row.status] = parseInt(row.count, 10);
+      casesByOutcome: casesByOutcome.reduce((acc, row) => {
+        acc[row.outcome] = parseInt(row.count, 10);
         return acc;
       }, {}),
     };

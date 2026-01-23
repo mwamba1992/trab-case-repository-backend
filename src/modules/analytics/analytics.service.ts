@@ -69,8 +69,6 @@ export class AnalyticsService {
   }> {
     const [
       totalCases,
-      decidedCases,
-      pendingCases,
       taxStats,
       avgDecisionDays,
       last30Days,
@@ -78,12 +76,6 @@ export class AnalyticsService {
       lastYear,
     ] = await Promise.all([
       this.caseRepository.count(),
-      this.caseRepository.count({
-        where: { status: 'decided' as any },
-      }),
-      this.caseRepository.count({
-        where: { status: 'pending' as any },
-      }),
       this.caseRepository
         .createQueryBuilder('case')
         .select('SUM(case.tax_amount_disputed)', 'totalDisputed')
@@ -99,8 +91,8 @@ export class AnalyticsService {
     return {
       overview: {
         totalCases,
-        decidedCases,
-        pendingCases,
+        decidedCases: totalCases, // All cases in system are decided
+        pendingCases: 0, // No pending cases
         totalTaxDisputed: parseFloat(taxStats?.totalDisputed || 0),
         totalTaxAwarded: parseFloat(taxStats?.totalAwarded || 0),
         averageDecisionDays: avgDecisionDays,
@@ -121,20 +113,14 @@ export class AnalyticsService {
       .createQueryBuilder('case')
       .select('case.chairperson', 'chairperson')
       .addSelect('COUNT(*)', 'totalCases')
+      .addSelect('COUNT(*)', 'decided')  // All cases are decided
       .addSelect(
-        'SUM(CASE WHEN case.status = \'decided\' THEN 1 ELSE 0 END)',
-        'decided',
-      )
-      .addSelect(
-        'SUM(CASE WHEN case.outcome = \'dismissed\' THEN 1 ELSE 0 END)',
+        'SUM(CASE WHEN case.outcome ILIKE \'%dismissed%\' THEN 1 ELSE 0 END)',
         'dismissed',
       )
+      .addSelect('0', 'pending')  // No pending cases
       .addSelect(
-        'SUM(CASE WHEN case.status = \'pending\' THEN 1 ELSE 0 END)',
-        'pending',
-      )
-      .addSelect(
-        'SUM(CASE WHEN case.outcome = \'allowed\' THEN 1 ELSE 0 END)',
+        'SUM(CASE WHEN case.outcome ILIKE \'%allowed%\' AND case.outcome NOT ILIKE \'%dismissed%\' THEN 1 ELSE 0 END)',
         'allowed',
       )
       .addSelect(
@@ -174,21 +160,18 @@ export class AnalyticsService {
       .select('case.case_type', 'taxType')
       .addSelect('COUNT(*)', 'totalCases')
       .addSelect(
-        'SUM(CASE WHEN case.outcome = \'allowed\' THEN 1 ELSE 0 END)',
+        'SUM(CASE WHEN case.outcome ILIKE \'%allowed%\' AND case.outcome NOT ILIKE \'%dismissed%\' AND case.outcome NOT ILIKE \'%partial%\' THEN 1 ELSE 0 END)',
         'allowed',
       )
       .addSelect(
-        'SUM(CASE WHEN case.outcome = \'dismissed\' THEN 1 ELSE 0 END)',
+        'SUM(CASE WHEN case.outcome ILIKE \'%dismissed%\' THEN 1 ELSE 0 END)',
         'dismissed',
       )
       .addSelect(
-        'SUM(CASE WHEN case.outcome = \'partially_allowed\' THEN 1 ELSE 0 END)',
+        'SUM(CASE WHEN case.outcome ILIKE \'%partial%\' THEN 1 ELSE 0 END)',
         'partlyAllowed',
       )
-      .addSelect(
-        'SUM(CASE WHEN case.status = \'pending\' THEN 1 ELSE 0 END)',
-        'pending',
-      )
+      .addSelect('0', 'pending')  // No pending cases
       .addSelect('AVG(case.tax_amount_disputed)', 'avgDisputed')
       .addSelect('AVG(case.tax_amount_awarded)', 'avgAwarded')
       .where('case.case_type IS NOT NULL')
@@ -243,18 +226,12 @@ export class AnalyticsService {
       .createQueryBuilder('case')
       .select(`TO_CHAR(DATE_TRUNC('${dateTrunc}', case.filing_date), '${dateFormat}')`, 'period')
       .addSelect('COUNT(*)', 'totalCases')
+      .addSelect('COUNT(*)', 'decided')  // All cases are decided
       .addSelect(
-        'SUM(CASE WHEN case.status = \'decided\' THEN 1 ELSE 0 END)',
-        'decided',
-      )
-      .addSelect(
-        'SUM(CASE WHEN case.outcome = \'dismissed\' THEN 1 ELSE 0 END)',
+        'SUM(CASE WHEN case.outcome ILIKE \'%dismissed%\' THEN 1 ELSE 0 END)',
         'dismissed',
       )
-      .addSelect(
-        'SUM(CASE WHEN case.status = \'pending\' THEN 1 ELSE 0 END)',
-        'pending',
-      )
+      .addSelect('0', 'pending')  // No pending cases
       .where('case.filing_date IS NOT NULL')
       .groupBy('period')
       .orderBy('period', 'DESC')
@@ -311,11 +288,11 @@ export class AnalyticsService {
       .select('case.appellant', 'appellant')
       .addSelect('COUNT(*)', 'caseCount')
       .addSelect(
-        'SUM(CASE WHEN case.outcome IN (\'allowed\', \'partially_allowed\') THEN 1 ELSE 0 END)',
+        'SUM(CASE WHEN case.outcome ILIKE \'%allowed%\' AND case.outcome NOT ILIKE \'%dismissed%\' THEN 1 ELSE 0 END)',
         'wonCases',
       )
       .addSelect(
-        'SUM(CASE WHEN case.outcome = \'dismissed\' THEN 1 ELSE 0 END)',
+        'SUM(CASE WHEN case.outcome ILIKE \'%dismissed%\' THEN 1 ELSE 0 END)',
         'lostCases',
       )
       .where('case.appellant IS NOT NULL')
