@@ -21,8 +21,7 @@ export interface SearchResult {
     filingDate: string | null;
     hearingDate: string | null;
     decisionDate: string | null;
-    status: string;
-    outcome: string | null;
+    status: string | null;
     taxAmountDisputed: number | null;
     chairperson: string | null;
     boardMembers: string[] | null;
@@ -73,7 +72,6 @@ export class SearchService {
         cs.filing_date,
         cs.hearing_date,
         cs.decision_date,
-        cs.status,
         cs.outcome,
         cs.tax_amount_disputed,
         cs.chairperson,
@@ -108,8 +106,7 @@ export class SearchService {
         filingDate: row.filing_date,
         hearingDate: row.hearing_date,
         decisionDate: row.decision_date,
-        status: row.status,
-        outcome: row.outcome,
+        status: row.outcome,
         taxAmountDisputed: row.tax_amount_disputed
           ? parseFloat(row.tax_amount_disputed)
           : null,
@@ -161,7 +158,6 @@ export class SearchService {
         cs.filing_date,
         cs.hearing_date,
         cs.decision_date,
-        cs.status,
         cs.outcome,
         cs.tax_amount_disputed,
         cs.chairperson,
@@ -196,8 +192,7 @@ export class SearchService {
         filingDate: row.filing_date,
         hearingDate: row.hearing_date,
         decisionDate: row.decision_date,
-        status: row.status,
-        outcome: row.outcome,
+        status: row.outcome,
         taxAmountDisputed: row.tax_amount_disputed
           ? parseFloat(row.tax_amount_disputed)
           : null,
@@ -253,7 +248,6 @@ export class SearchService {
           cs.filing_date,
           cs.hearing_date,
           cs.decision_date,
-          cs.status,
           cs.outcome,
           cs.tax_amount_disputed,
           cs.chairperson,
@@ -279,7 +273,6 @@ export class SearchService {
           cs.filing_date,
           cs.hearing_date,
           cs.decision_date,
-          cs.status,
           cs.outcome,
           cs.tax_amount_disputed,
           cs.chairperson,
@@ -304,7 +297,6 @@ export class SearchService {
         COALESCE(ft.filing_date, sem.filing_date) as filing_date,
         COALESCE(ft.hearing_date, sem.hearing_date) as hearing_date,
         COALESCE(ft.decision_date, sem.decision_date) as decision_date,
-        COALESCE(ft.status, sem.status) as status,
         COALESCE(ft.outcome, sem.outcome) as outcome,
         COALESCE(ft.tax_amount_disputed, sem.tax_amount_disputed) as tax_amount_disputed,
         COALESCE(ft.chairperson, sem.chairperson) as chairperson,
@@ -342,8 +334,7 @@ export class SearchService {
         filingDate: row.filing_date,
         hearingDate: row.hearing_date,
         decisionDate: row.decision_date,
-        status: row.status,
-        outcome: row.outcome,
+        status: row.outcome,
         taxAmountDisputed: row.tax_amount_disputed
           ? parseFloat(row.tax_amount_disputed)
           : null,
